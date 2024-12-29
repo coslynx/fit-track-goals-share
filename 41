@@ -1,0 +1,108 @@
+// api/controllers/authController.js
+
+const express = require('express');
+const mongodb = require('mongodb');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const { logger } = require('../../config/logger');
+
+
+const signup = async (req, res) => {
+  try {
+    logger.info('Signup request received');
+      const { username, email, password } = req.body;
+
+      if (!username || typeof username !== 'string' || username.trim() === '') {
+        logger.error('Signup failed: Username is missing or invalid');
+        return res.status(400).json({ message: 'Username is required and must be a non-empty string' });
+      }
+  
+      if (!email || typeof email !== 'string' || email.trim() === '' || !email.includes('@')) {
+        logger.error('Signup failed: Email is missing or invalid');
+        return res.status(400).json({ message: 'Email is required and must be a valid email address' });
+      }
+    
+      if (!password || typeof password !== 'string' || password.trim() === '') {
+          logger.error('Signup failed: Password is missing or invalid');
+          return res.status(400).json({ message: 'Password is required and must be a non-empty string' });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const newUser = new User({
+          username,
+          email,
+          password: hashedPassword,
+      });
+
+      const savedUser = await newUser.save();
+
+      const token = jwt.sign(
+          { userId: savedUser._id },
+           process.env.JWT_SECRET,
+          { expiresIn: '24h' }
+      );
+       logger.info('Signup successful');
+       res.status(201).json({ message: 'User created successfully', token, user: savedUser });
+
+  } catch (error) {
+      logger.error('Signup failed with error:', error);
+      res.status(500).json({ message: 'Failed to create user', error: error.message });
+  }
+};
+
+
+const login = async (req, res) => {
+    try {
+        logger.info('Login request received');
+        const { email, password } = req.body;
+
+        if (!email || typeof email !== 'string' || email.trim() === '' || !email.includes('@')) {
+            logger.error('Login failed: Email is missing or invalid');
+           return res.status(400).json({ message: 'Email is required and must be a valid email address' });
+        }
+       if (!password || typeof password !== 'string' || password.trim() === '') {
+            logger.error('Login failed: Password is missing or invalid');
+            return res.status(400).json({ message: 'Password is required and must be a non-empty string' });
+         }
+
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            logger.error('Login failed: Invalid credentials');
+           return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+           logger.error('Login failed: Invalid credentials');
+           return res.status(401).json({ message: 'Invalid credentials' });
+        }
+    
+        const token = jwt.sign(
+           { userId: user._id },
+           process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        logger.info('Login successful');
+       res.status(200).json({ message: 'Login successful', token, user });
+
+    } catch (error) {
+        logger.error('Login failed with error:', error);
+        res.status(500).json({ message: 'Failed to login', error: error.message });
+    }
+};
+
+
+const logout = (req, res) => {
+  logger.info('Logout request received');
+  res.status(200).json({ message: 'Logout successful' });
+};
+
+module.exports = {
+  signup,
+  login,
+  logout
+};
