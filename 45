@@ -1,0 +1,117 @@
+import React, { useEffect, useState } from 'react';
+import { useFetch } from '../../hooks/useFetch';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Title,
+  CategoryScale,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { format } from 'date-fns';
+import { Activity } from '../../types/Activity';
+
+ChartJS.register(
+    LineElement,
+    PointElement,
+    LinearScale,
+    Title,
+    CategoryScale,
+    Tooltip,
+    Legend
+);
+
+
+interface ActivityDataPoint {
+  date: string;
+  value: number;
+}
+
+interface ActivityChartProps {
+  goalId: string;
+  days?: number;
+}
+
+
+const ActivityChart: React.FC<ActivityChartProps> = ({ goalId, days = 7 }) => {
+    const [chartData, setChartData] = useState<{ labels: string[]; datasets: any[] }>({
+      labels: [],
+      datasets: [],
+    });
+
+    const { data, loading, error } = useFetch<Activity[]>(
+      /api/activities?goalId=${goalId}&days=${days}
+    );
+    
+    useEffect(() => {
+        if (data) {
+          const activityDataPoints: ActivityDataPoint[] = data.map(activity => ({
+            date: format(new Date(activity.date), 'MMM dd'),
+            value: activity.value
+          }));
+
+            const labels = activityDataPoints.map(item => item.date);
+            const values = activityDataPoints.map(item => item.value);
+    
+          setChartData({
+            labels: labels,
+            datasets: [
+              {
+                label: 'Activity Progress',
+                data: values,
+                fill: false,
+                backgroundColor: 'rgb(75, 192, 192)',
+                borderColor: 'rgba(75, 192, 192, 0.8)',
+                tension: 0.1,
+                pointRadius: 5,
+                pointBorderColor: 'rgb(75, 192, 192)',
+                pointBackgroundColor: 'rgb(75, 192, 192)'
+              },
+            ],
+          });
+        }
+      }, [data, days]);
+
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: 'Activity Chart',
+      },
+    },
+      scales: {
+          x: {
+              title: {
+                  display: true,
+                  text: 'Date',
+              },
+              type: 'category'
+          },
+          y: {
+             title: {
+                  display: true,
+                  text: 'Value',
+              },
+              beginAtZero: true,
+          }
+      }
+  };
+
+  if (loading) return <p>Loading chart data...</p>;
+  if (error) return <p>Error loading chart data.</p>;
+  if (chartData.labels.length === 0) return <p>No activity data available.</p>;
+
+
+  return (
+    <Line data={chartData} options={options} />
+  );
+};
+
+export default ActivityChart;
