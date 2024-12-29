@@ -1,0 +1,90 @@
+// api/controllers/socialController.js
+// Importing necessary modules
+const express = require('express');
+const { ObjectId } = require('mongodb');
+const { Post } = require('../models/Post');
+const { User } = require('../models/User');
+const { authMiddleware } = require('../middleware/authMiddleware');
+const { errorMiddleware } = require('../middleware/errorMiddleware');
+const { sanitize } = require('../utils/helpers');
+
+
+const router = express.Router();
+
+/**
+ * @route   POST /api/posts
+ * @desc    Create a new social post
+ * @access  Private
+ */
+router.post('/', authMiddleware, async (req, res, next) => {
+  try {
+    // Extract content and userId from the request body
+    const { content, userId } = req.body;
+
+    // Validate input, check for content and user
+    if (!content || !userId) {
+      return res.status(400).json({ message: 'Content and userId are required' });
+    }
+
+
+     // Sanitize content to prevent XSS attacks
+    const sanitizedContent = sanitize(content);
+
+    // Check if the user exists
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+
+    // Create a new Post document
+    const newPost = new Post({
+      content: sanitizedContent,
+      userId: new ObjectId(userId),
+    });
+
+
+    // Save the new post
+    const savedPost = await newPost.save();
+
+
+    // Respond with the created post and a 201 status code
+    res.status(201).json(savedPost);
+  } catch (error) {
+    // Pass errors to the error handling middleware
+      next(error);
+  }
+});
+
+
+
+/**
+ * @route   GET /api/posts
+ * @desc    Get all social posts, supports pagination
+ * @access  Public
+ */
+router.get('/', async (req, res, next) => {
+  try {
+    // Extract page and limit from query parameters, default to page 1 and limit 10
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+      // Calculate the skip value based on the page and limit
+    const skip = (page - 1) * limit;
+
+
+      // Retrieve all posts from the database
+    const posts = await Post.find().skip(skip).limit(limit).sort({ createdAt: -1 });
+    
+    // Respond with all posts and a 200 status code
+    res.status(200).json(posts);
+  } catch (error) {
+       // Pass errors to the error handling middleware
+     next(error);
+  }
+});
+
+// Using error handling middleware
+router.use(errorMiddleware);
+
+module.exports = router;
