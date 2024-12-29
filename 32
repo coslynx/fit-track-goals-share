@@ -1,0 +1,83 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const Post = require('../models/Post');
+const authMiddleware = require('../middleware/authMiddleware');
+const errorMiddleware = require('../middleware/errorMiddleware');
+
+const router = express.Router();
+
+// Route to create a new social post
+router.post(
+  '/api/posts',
+  authMiddleware,
+  [
+    body('content')
+      .trim()
+      .notEmpty()
+      .withMessage('Content is required')
+      .isString()
+      .withMessage('Content must be a string')
+      .isLength({ max: 500 })
+      .withMessage('Content cannot exceed 500 characters')
+      .escape(), // Sanitizes by escaping HTML characters
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return errorMiddleware(errors.array(), req, res);
+    }
+    
+    const { content } = req.body;
+    const userId = req.user.id; // Get user ID from auth middleware
+
+    try {
+      const newPost = new Post({
+        content,
+        author: userId,
+      });
+
+      await newPost.save();
+      
+       res.status(201).json({ message: 'Post created successfully', post: { content: newPost.content, author: newPost.author, createdAt: newPost.createdAt } });
+    } catch (error) {
+      errorMiddleware(error.message, req, res, 500);
+    }
+  }
+);
+
+// Route to retrieve all social posts
+router.get('/api/posts', authMiddleware, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+
+  try {
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('author', 'username');
+
+    const totalPosts = await Post.countDocuments();
+        
+    const postsWithAuthorInfo = posts.map(post => ({
+        content: post.content,
+        author: post.author ? post.author._id : null,
+        authorUsername: post.author ? post.author.username: 'Deleted User',
+        createdAt: post.createdAt
+    }))
+      
+
+    res.status(200).json({
+      posts: postsWithAuthorInfo,
+      currentPage: page,
+      totalPages: Math.ceil(totalPosts / limit),
+      totalPosts: totalPosts,
+    });
+  } catch (error) {
+    errorMiddleware(error.message, req, res, 500);
+  }
+});
+
+module.exports = router;
