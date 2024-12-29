@@ -1,0 +1,96 @@
+// api/middleware/33.js
+// Implements a custom rate limiting middleware using express and dotenv.
+
+import express from 'express';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Define the structure for rate limiter options
+interface RateLimiterOptions {
+    MAX_REQUESTS: number;
+    TIME_WINDOW_MS: number;
+}
+
+// Define the structure for the in-memory request store
+interface RequestInfo {
+    count: number;
+    lastRequestTime: number;
+}
+
+// Define the in-memory store to track request counts per IP address
+const requestCounts = new Map<string, RequestInfo>();
+
+// Function to sanitize and validate environment variables
+function validateEnvVars(): RateLimiterOptions {
+    const maxRequests = process.env.MAX_REQUESTS ? parseInt(process.env.MAX_REQUESTS, 10) : NaN;
+    const timeWindowMs = process.env.TIME_WINDOW_MS ? parseInt(process.env.TIME_WINDOW_MS, 10) : NaN;
+
+    if (isNaN(maxRequests) || maxRequests <= 0) {
+        throw new Error('Invalid or missing MAX_REQUESTS environment variable.');
+    }
+
+    if (isNaN(timeWindowMs) || timeWindowMs <= 0) {
+      throw new Error('Invalid or missing TIME_WINDOW_MS environment variable.');
+  }
+
+    return {
+        MAX_REQUESTS: maxRequests,
+        TIME_WINDOW_MS: timeWindowMs,
+    };
+}
+
+
+// Create a rate limiting middleware function
+const rateLimitMiddleware = (req, res, next) => {
+  try {
+    // Load rate limit configurations from env variables
+    const { MAX_REQUESTS, TIME_WINDOW_MS } = validateEnvVars();
+
+    // Get the client's IP address
+    const clientIp = req.ip;
+
+    // Get the current time
+    const currentTime = Date.now();
+
+    // Get or create the request info for the client IP
+    let requestInfo = requestCounts.get(clientIp) || { count: 0, lastRequestTime: 0 };
+
+      // Check if the time window has elapsed
+      if (currentTime - requestInfo.lastRequestTime > TIME_WINDOW_MS) {
+          // Reset count and update last request time
+          requestInfo = { count: 1, lastRequestTime: currentTime };
+      } else {
+          // Check if the request count has exceeded the maximum
+          if (requestInfo.count >= MAX_REQUESTS) {
+               // Calculate remaining time before next request is allowed
+               const remainingTime = TIME_WINDOW_MS - (currentTime - requestInfo.lastRequestTime);
+               // Return a 429 Too Many Requests error if rate limit exceeded
+               res.setHeader('Retry-After', Math.ceil(remainingTime / 1000));
+              return res.status(429).json({
+                 message: Too Many Requests, please try again after ${Math.ceil(remainingTime / 1000)} seconds,
+               });
+           } else {
+              // Increment the request count for the client IP
+               requestInfo.count++;
+           }
+          // update the request time
+        requestInfo.lastRequestTime = currentTime;
+      }
+
+    // Update the request info in the store
+    requestCounts.set(clientIp, requestInfo);
+
+
+    // Allow the request to proceed to the next middleware/route handler
+    next();
+  }
+    catch (error) {
+        // Handle errors during the .env file loading
+        console.error('Error in rate limiting middleware:', error.message);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+export default rateLimitMiddleware;
