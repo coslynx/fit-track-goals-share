@@ -1,0 +1,77 @@
+// api/controllers/socialController.js
+// Controller for handling social post related API requests.
+
+const express = require('express'); // Import express for routing
+const { ObjectId } = require('mongodb'); // Import ObjectId for MongoDB ID handling
+const Post = require('../models/Post'); // Import the Post model
+const { verifyToken } = require('../middleware/authMiddleware'); // Import auth middleware
+const { handleErrors } = require('../middleware/errorMiddleware'); // Import error handling middleware
+
+/**
+ * @async
+ * @function createPost
+ * @description Creates a new social post.
+ * @param {express.Request} req - Express request object.
+ * @param {express.Response} res - Express response object.
+ * @returns {Promise<void>} - Returns a Promise that resolves with no value. Sends response to client
+ */
+const createPost = async (req, res) => {
+  try {
+    // Extract post content from the request body
+    const { content } = req.body;
+
+    // Use auth middleware to verify JWT token and extract userId
+    const userId = verifyToken(req, res);
+
+     // Validate input
+     if (!content || typeof content !== 'string') {
+      return res.status(400).json({ message: 'Content is required and must be a string.' });
+    }
+
+
+    // Create a new Post document
+    const newPost = new Post({
+      content,
+      userId,
+    });
+
+    // Save the post to the database
+    const savedPost = await newPost.save();
+
+    // If successful, return a 201 status with the created post
+    res.status(201).json(savedPost);
+  } catch (error) {
+      // If database error occurs, return 500 status with a message
+     handleErrors(res, error, 500);
+  }
+};
+
+/**
+ * @async
+ * @function getPosts
+ * @description Retrieves all social posts.
+ * @param {express.Request} req - Express request object.
+ * @param {express.Response} res - Express response object.
+ * @returns {Promise<void>} - Returns a Promise that resolves with no value. Sends response to client
+ */
+const getPosts = async (req, res) => {
+  try {
+      // Use auth middleware to verify JWT token
+      verifyToken(req, res);
+
+      // Fetch all posts from the database
+      const posts = await Post.find({});
+
+      // Return 200 status with array of posts
+      res.status(200).json(posts);
+  } catch (error) {
+       // If database error occurs, return 500 status with a message
+       handleErrors(res, error, 500);
+  }
+};
+
+
+module.exports = {
+  createPost,
+  getPosts,
+};
