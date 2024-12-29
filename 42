@@ -1,0 +1,24 @@
+/**
+ * Calculates a specific string output based on the input number.
+ * If the input number is a multiple of 3, returns "Fizz".
+ * If the input number is a multiple of 5, returns "Buzz".
+ * If the input number is a multiple of both 3 and 5, returns "FizzBuzz".
+ * Otherwise, returns the input number converted to a string.
+ *
+ * @param {number} inputNumber - The number to check.
+ * @returns {string} The string "Fizz", "Buzz", "FizzBuzz", or the input number as a string.
+ */
+function calculateAnswer(inputNumber: number): string {
+    if (inputNumber % 3 === 0 && inputNumber % 5 === 0) {
+        return "FizzBuzz";
+    }
+    if (inputNumber % 3 === 0) {
+        return "Fizz";
+    }
+    if (inputNumber % 5 === 0) {
+        return "Buzz";
+    }
+    return String(inputNumber);
+}
+
+export { calculateAnswer };
