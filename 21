@@ -1,0 +1,32 @@
+const jwt = require('jsonwebtoken');
+const { secret } = require('../../config/auth');
+const { handleError } = require('./errorMiddleware');
+
+module.exports.authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+
+  if (typeof authHeader !== 'string') {
+        return handleError(res, 401, 'Unauthorized - No Token', new Error("Authorization header is not a string"));
+    }
+
+
+  const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+       return handleError(res, 401, 'Unauthorized - No Token', new Error("No token found in header"));
+    }
+  
+
+  try {
+    const decoded = jwt.verify(token, secret);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+         return handleError(res, 401, 'Unauthorized - Invalid Token', error);
+      
+    } else{
+      return handleError(res, 401, 'Unauthorized - Failed to process token', error);
+    }
+  }
+};
