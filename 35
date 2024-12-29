@@ -1,0 +1,52 @@
+// api/middleware/authMiddleware.js
+
+// Import necessary modules
+const jwt = require('jsonwebtoken');
+const { secret } = require('../../config/auth');
+
+/**
+ * Express middleware function to verify the authenticity of user tokens.
+ *
+ * This middleware extracts the token from the Authorization header,
+ * verifies its validity using jsonwebtoken, and adds the decoded user
+ * payload to the req.user object.
+ *
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {function} next - Express next middleware function
+ */
+const authMiddleware = (req, res, next) => {
+    try {
+        // Extract token from Authorization header
+        const authHeader = req.headers.authorization;
+
+        // Check if authHeader exists and starts with 'Bearer '
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            // Respond with 401 status code and error message if token is missing or invalid format
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+
+        // Extract token from header, removing 'Bearer ' prefix
+        const token = authHeader.split(' ')[1];
+
+        // Verify the token using jsonwebtoken and secret key from config
+        jwt.verify(token, secret, (err, decoded) => {
+            if (err) {
+                // Respond with 401 status code and error message if token verification fails
+                 return res.status(401).json({ message: 'Unauthorized' });
+            }
+            // If token is valid add user payload to req.user and call next
+            req.user = decoded;
+            next();
+        });
+
+
+    } catch (error) {
+        // Respond with 500 status code and error message if any other error occurs
+        console.error('Error in authMiddleware:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+
+module.exports = authMiddleware;
