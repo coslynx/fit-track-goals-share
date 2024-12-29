@@ -1,0 +1,64 @@
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const { verifyToken } = require('../middleware/authMiddleware');
+const {handleErrors} = require('../middleware/errorMiddleware');
+const Activity = require('../models/Activity');
+const { validateActivityData } = require('../../src/utils/validators');
+
+router.post('/api/users/:userId/goals/:goalId/activities', verifyToken, async (req, res) => {
+    try {
+        const { userId, goalId } = req.params;
+        const { type, value, date } = req.body;
+
+       const validationErrors = validateActivityData(req.body);
+        if (validationErrors) {
+            return res.status(400).json({ success: false, error: validationErrors });
+        }
+
+
+        const newActivity = new Activity({
+            userId: mongoose.Types.ObjectId(userId),
+            goalId: mongoose.Types.ObjectId(goalId),
+            type,
+            value,
+            date: new Date(date)
+        });
+
+
+        const savedActivity = await newActivity.save();
+
+         res.status(201).json({ success: true, data: savedActivity });
+
+
+    } catch (error) {
+         handleErrors(error, req, res);
+    }
+});
+
+
+router.get('/api/users/:userId/goals/:goalId/activities', verifyToken, async (req, res) => {
+    try {
+        const { userId, goalId } = req.params;
+        const { limit, skip } = req.query;
+
+        const limitInt = limit ? parseInt(limit, 10) : 10;
+        const skipInt = skip ? parseInt(skip, 10) : 0;
+
+
+        const activities = await Activity.find({
+            userId: mongoose.Types.ObjectId(userId),
+            goalId: mongoose.Types.ObjectId(goalId)
+        })
+            .limit(limitInt)
+            .skip(skipInt);
+
+        res.status(200).json({ success: true, data: activities });
+
+    } catch (error) {
+       handleErrors(error, req, res);
+    }
+});
+
+
+module.exports = router;
