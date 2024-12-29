@@ -1,0 +1,44 @@
+import rateLimit from 'express-rate-limit';
+import { Request, Response, NextFunction } from 'express';
+
+interface Options {
+  max: number;
+  windowMs: number;
+}
+
+const rateLimitMiddleware = (options: Options = {max: 100, windowMs: 60000}) => {
+    if (!options || typeof options !== 'object') {
+        throw new Error('Rate limit options must be an object.');
+      }
+
+    const { max, windowMs } = options;
+
+    if (typeof max !== 'number' || max <= 0) {
+      const error = new Error("Invalid 'max' value. It must be a positive number.");
+      (error as any).code = 'ERR_INVALID_MAX';
+      throw error;
+    }
+
+    if (typeof windowMs !== 'number' || windowMs <= 0) {
+        const error = new Error("Invalid 'windowMs' value. It must be a positive number.");
+        (error as any).code = 'ERR_INVALID_WINDOWMS';
+        throw error;
+      }
+
+  return rateLimit({
+    windowMs: windowMs,
+    max: max,
+    handler: (req: Request, res: Response) => {
+        req.log.warn('Rate limit exceeded', {
+            ip: req.ip,
+            originalUrl: req.originalUrl,
+            method: req.method,
+          });
+      res.status(429).json({ message: 'Rate limit exceeded' });
+    },
+    standardHeaders: true, 
+    legacyHeaders: false,
+  });
+};
+
+export default rateLimitMiddleware;
