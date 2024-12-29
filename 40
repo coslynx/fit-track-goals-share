@@ -1,0 +1,15 @@
+// Configuration file for authentication. This file should not be exposed.
+import dotenv from 'dotenv';
+dotenv.config();
+
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is not set');
+}
+
+
+const authConfig = {
+    jwtSecret: process.env.JWT_SECRET,
+    jwtAlgorithm: 'HS256',
+};
+
+export default authConfig;
