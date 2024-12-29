@@ -1,0 +1,68 @@
+// api/middleware/authMiddleware.js
+// Import necessary modules
+const jwt = require('jsonwebtoken');
+const express = require('express');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config({ path: './config/.env' });
+
+// Import secret key from config/auth.js
+const { jwtSecret } = require('../config/auth');
+
+// Define the authentication middleware function
+const authMiddleware = async (req, res, next) => {
+  try {
+    // Extract token from the Authorization header
+    const authHeader = req.headers.authorization;
+    
+    // Check if the Authorization header exists and starts with 'Bearer '
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Extract the token from the header (remove 'Bearer ')
+    const token = authHeader.split(' ')[1];
+    
+    // Verify the token using the secret key
+    const decoded = await jwt.verify(token, jwtSecret);
+
+     // If token is valid, extract the user ID and store it in req.userId
+    req.userId = decoded.userId;
+    
+    // Call next() to continue the request processing
+    next();
+  } catch (error) {
+    // Handle exceptions during token verification
+    console.error("Error during token verification:", error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+module.exports = authMiddleware;
+
+// Example Test Cases
+// 1. Valid Token:
+//   - Given a valid token in the Authorization header
+//   - Expect the middleware to extract the user ID and call next()
+//   - Test should check if req.userId is set and next() is called without errors
+
+// 2. Invalid Token:
+//   - Given an invalid token in the Authorization header
+//   - Expect the middleware to respond with a 401 status code and "Unauthorized" message
+//   - Test should check if the response status code is 401 and correct error message is returned
+
+// 3. Missing Token:
+//   - Given no token in the Authorization header
+//   - Expect the middleware to respond with a 401 status code and "Unauthorized" message
+//   - Test should check if the response status code is 401 and correct error message is returned
+
+// 4. Token without 'Bearer ' Prefix:
+//   - Given a token in the Authorization header without "Bearer " prefix.
+//   - Expect the middleware to respond with a 401 status code and "Unauthorized" message.
+//   - Test should check if the response status code is 401 and correct error message is returned
+
+// 5. Internal Server Error
+//   - Given a token that throws an exception on verification.
+//    - Expect a 500 status code and “Internal Server Error” Message.
+//  - Should test if the response is 500 and the error message is returned.
