@@ -1,0 +1,44 @@
+/**
+ * Generates a unique ID using crypto.randomUUID().
+ *
+ * @returns {string} A unique ID.
+ */
+export function generateId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Formats a Date object into a 'yyyy-MM-dd' string.
+ *
+ * @param {Date} date The Date object to format.
+ * @returns {string} A formatted date string in 'yyyy-MM-dd' format, or an empty string if input is invalid.
+ */
+import { format } from 'date-fns';
+
+export function formatDate(date: Date): string {
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    return "";
+  }
+  return format(date, 'yyyy-MM-dd');
+}
+
+
+/**
+ * Truncates a string if its length exceeds maxLength and adds '...' at the end.
+ *
+ * @param {string | number | null | undefined} text The text to truncate.
+ * @param {number} maxLength The maximum length of the string.
+ * @returns {string} The truncated string with '...' or an empty string if input is invalid.
+ */
+export function truncateText(text: string | number | null | undefined, maxLength: number): string {
+  if (text == null) {
+    return "";
+  }
+    
+  const strText = String(text);
+
+  if (strText.length > maxLength) {
+    return strText.substring(0, maxLength) + '...';
+  }
+  return strText;
+}
