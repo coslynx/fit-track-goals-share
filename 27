@@ -1,0 +1,147 @@
+const express = require('express');
+const { ObjectId } = require('mongodb');
+const { Post } = require('../models/Post');
+const { authMiddleware } = require('../middleware/authMiddleware');
+const { errorMiddleware } = require('../middleware/errorMiddleware');
+const { sanitize } = require('../utils/helpers');
+
+
+const router = express.Router();
+
+// POST /api/posts - Create a new post
+router.post('/', authMiddleware, async (req, res, next) => {
+  try {
+      console.log('POST /api/posts - Request received', req.body);
+
+    const { content } = req.body;
+
+    // Input validation
+    if (!content || typeof content !== 'string') {
+      console.error('POST /api/posts - Invalid input: Content must be a non-empty string.');
+        return res.status(400).json({ message: 'Content must be a non-empty string' });
+    }
+    
+    const sanitizedContent = sanitize(content);
+
+    const newPost = new Post({
+      content: sanitizedContent,
+      userId: req.user._id,
+      createdAt: new Date(),
+    });
+
+      const savedPost = await newPost.save();
+
+      console.log('POST /api/posts - Post created successfully', savedPost);
+      res.status(201).json({
+        _id: savedPost._id.toString(),
+        content: savedPost.content,
+        userId: savedPost.userId.toString(),
+        createdAt: savedPost.createdAt.toISOString()
+      });
+  } catch (error) {
+      console.error('POST /api/posts - Error creating post:', error);
+      next(error);
+  }
+});
+
+// GET /api/posts - Retrieve all posts with pagination and sorting
+router.get('/', authMiddleware, async (req, res, next) => {
+  try {
+      console.log('GET /api/posts - Request received', req.query);
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .exec();
+
+      const total = await Post.countDocuments();
+      
+      const formattedPosts = posts.map(post => ({
+        _id: post._id.toString(),
+        content: post.content,
+        userId: post.userId.toString(),
+        createdAt: post.createdAt.toISOString()
+    }));
+
+
+    console.log('GET /api/posts - Posts retrieved successfully, count:', formattedPosts.length);
+      res.status(200).json({
+        page,
+        limit,
+        posts: formattedPosts,
+        total
+      });
+  } catch (error) {
+    console.error('GET /api/posts - Error retrieving posts:', error);
+    next(error);
+  }
+});
+
+router.use(errorMiddleware);
+
+module.exports = router;
+
+/* Test cases:
+
+// Test case 1: Successful post creation
+// POST /api/posts with valid content
+// Expected response: status 201, newly created post data
+
+// Test case 2: Post creation with missing content
+// POST /api/posts without content
+// Expected response: status 400, error message 'Content must be a non-empty string'
+
+// Test case 3: Post creation with invalid content
+// POST /api/posts with content as a number or other invalid type
+// Expected response: status 400, error message 'Content must be a non-empty string'
+
+// Test case 4: Post creation with server error
+// Simulate a database error during post creation
+// Expected response: status 500, descriptive error message
+
+// Test case 5: Successful post retrieval
+// GET /api/posts without pagination params
+// Expected response: status 200, array of post objects (default page 1, limit 10), and total number
+
+// Test case 6: Successful post retrieval with pagination params
+// GET /api/posts with page=2&limit=5
+// Expected response: status 200, array of post objects (page 2, limit 5), and total number
+
+// Test case 7: Post retrieval with server error
+// Simulate a database error during post retrieval
+// Expected response: status 500, descriptive error message
+
+// Test case 8: Unauthorized access with missing auth token
+// POST /api/posts without Authorization header
+// Expected response: status 401, error message 'Unauthorized - No token provided'
+
+// Test case 9: Unauthorized access with invalid auth token
+// POST /api/posts with invalid Authorization header
+// Expected response: status 401, error message 'Unauthorized - Invalid token'
+
+// Test case 10: Unauthorized access with missing auth token on GET
+// GET /api/posts without Authorization header
+// Expected response: status 401, error message 'Unauthorized - No token provided'
+
+// Test case 11: Unauthorized access with invalid auth token on GET
+// GET /api/posts with invalid Authorization header
+// Expected response: status 401, error message 'Unauthorized - Invalid token'
+
+// Test case 12: Successful creation of a post with a long string
+// POST /api/posts with large text content
+// Expected Response: status 201, should return all data properly even if large string is provided
+
+// Test case 13: XSS prevention
+// POST /api/posts with html content as input
+// Expected Response: status 201, should store sanitized HTML content
+
+//Test case 14: Empty result
+// GET /api/posts when no post in the database
+// Expected Response: status 200, array with empty posts, and total count of 0
+*/
