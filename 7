@@ -1,0 +1,45 @@
+// api/middleware/authMiddleware.js
+// Middleware to verify the authenticity of user tokens using JWT
+const jwt = require('jsonwebtoken');
+const { authConfig } = require('../../config/auth');
+
+/**
+ * Middleware function to verify JWT tokens from the Authorization header.
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Promise<void>}
+ */
+const verifyAuthToken = async (req, res, next) => {
+  // 1. Extract the token from the Authorization header
+  const authHeader = req.headers.authorization;
+
+  // Check if the Authorization header exists
+  if (!authHeader) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  // Check if the Authorization header is in the correct format
+  const [bearer, token] = authHeader.split(' ');
+
+  // Check if the header starts with 'Bearer'
+  if (bearer !== 'Bearer' || !token) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    // 2. Verify the token using the secret key from config/auth.js
+    const decoded = await jwt.verify(token, authConfig.jwtSecret);
+
+    // 3. Attach the decoded user payload to the request object
+    req.user = decoded;
+    // 4. Call the next middleware function
+    next();
+  } catch (error) {
+    // Handle invalid token
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+};
+
+
+module.exports = { verifyAuthToken };
