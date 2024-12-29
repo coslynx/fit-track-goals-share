@@ -1,0 +1,253 @@
+/**
+ * @file api/middleware/24.js
+ * @description Custom rate-limiting middleware for Express.js applications.
+ * @requires express
+ * @requires dotenv
+ */
+
+// Import necessary modules
+const express = require('express');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
+
+/**
+ * @typedef {Object} RequestCounts
+ * @property {number} count - The number of requests from an IP address.
+ * @property {number} timestamp - Timestamp of the first request.
+ */
+
+/**
+ * @type {Object<string, RequestCounts>} requestCounts - Stores request counts per IP address.
+ */
+const requestCounts = {};
+
+/**
+ * Rate-limiting middleware for Express.js.
+ * @param {express.Request} req - The Express request object.
+ * @param {express.Response} res - The Express response object.
+ * @param {express.NextFunction} next - The Express next function.
+ */
+const rateLimitMiddleware = (req, res, next) => {
+  // Extract MAX_REQUESTS from environment variables or default to 10
+  const MAX_REQUESTS = parseInt(process.env.MAX_REQUESTS, 10) || 10;
+  // Extract TIME_WINDOW_MS from environment variables or default to 60000 (1 minute)
+  const TIME_WINDOW_MS = parseInt(process.env.TIME_WINDOW_MS, 10) || 60000;
+
+  // Get the client's IP address, handling potential headers and missing values
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  // Handle edge cases for missing or invalid IP address
+    if (!ipAddress) {
+       return res.status(400).json({ message: 'Missing or invalid IP address' });
+    }
+   // Handle possible malformed requests
+    if (typeof ipAddress !== 'string'){
+      return res.status(400).json({ message: 'Malformed Request' });
+    }
+
+    // Sanitize the IP address
+    const sanitizedIp = ipAddress.trim().split(',')[0];
+
+
+  // Initialize or retrieve the request count for the IP address
+  if (!requestCounts[sanitizedIp]) {
+      requestCounts[sanitizedIp] = {
+         count: 0,
+         timestamp: Date.now(),
+     };
+  }
+
+
+  // Increment request count
+  requestCounts[sanitizedIp].count++;
+
+   // Get the current time
+   const currentTime = Date.now();
+
+   // Calculate time difference since the first request from the IP
+  const timeDiff = currentTime - requestCounts[sanitizedIp].timestamp;
+
+   // Check if the time difference exceeds TIME_WINDOW_MS to reset counters
+   if(timeDiff > TIME_WINDOW_MS){
+       requestCounts[sanitizedIp] = {
+           count: 1,
+           timestamp: currentTime
+       };
+   }
+
+  // Check if the request count exceeds the maximum allowed requests
+  if (requestCounts[sanitizedIp].count > MAX_REQUESTS) {
+     // Calculate time to wait before retrying
+     const retryAfter = Math.ceil((TIME_WINDOW_MS - timeDiff)/ 1000);
+     // Send a 429 error with retry-after header and message
+    res.setHeader('Retry-After', retryAfter);
+    return res.status(429).json({ message: Too many requests. Please try again after ${retryAfter} seconds.});
+  }
+
+   // If request count is within the limit, continue processing
+  next();
+};
+
+
+module.exports = rateLimitMiddleware;
+
+// Example test cases
+
+// Mock request and response objects for testing
+const mockRequest = (ip, headers = {}) => ({
+    headers: {
+        'x-forwarded-for': ip,
+        ...headers
+    },
+    socket: {
+        remoteAddress: ip
+    }
+});
+
+const mockResponse = () => {
+    const res = {};
+    res.status = jest.fn().mockReturnValue(res);
+    res.json = jest.fn().mockReturnValue(res);
+    res.setHeader = jest.fn().mockReturnValue(res);
+    return res;
+};
+
+const mockNext = jest.fn();
+
+describe('rateLimitMiddleware', () => {
+    beforeEach(() => {
+      // Reset the requestCounts object before each test case
+        for (const key in requestCounts){
+           delete requestCounts[key];
+       }
+      jest.clearAllMocks();
+    });
+    it('should allow requests within the limit', () => {
+        const req = mockRequest('127.0.0.1');
+        const res = mockResponse();
+        for (let i = 0; i < 5; i++) {
+            rateLimitMiddleware(req, res, mockNext);
+        }
+          expect(res.status).not.toHaveBeenCalled();
+          expect(mockNext).toHaveBeenCalledTimes(5);
+    });
+
+    it('should reject requests exceeding the limit', () => {
+        const req = mockRequest('192.168.1.1');
+        const res = mockResponse();
+        for (let i = 0; i < 11; i++) {
+             rateLimitMiddleware(req,res,mockNext);
+        }
+
+        expect(res.status).toHaveBeenCalledWith(429);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({message: expect.stringContaining('Too many requests')}));
+        expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(Number));
+    });
+
+  it('should reset request counts after time window', async () => {
+      const req = mockRequest('172.17.0.1');
+      const res = mockResponse();
+
+    for (let i = 0; i < 11; i++) {
+      rateLimitMiddleware(req, res, mockNext);
+     }
+        expect(res.status).toHaveBeenCalledWith(429);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({message: expect.stringContaining('Too many requests')}));
+         jest.clearAllMocks();
+       // Wait for a time greater than TIME_WINDOW_MS + 1
+        await new Promise((resolve) => setTimeout(resolve, 60001));
+
+
+    for (let i = 0; i < 10; i++) {
+      rateLimitMiddleware(req,res, mockNext);
+    }
+    expect(res.status).not.toHaveBeenCalled();
+     expect(mockNext).toHaveBeenCalledTimes(10);
+ });
+
+
+    it('should handle requests from different IPs separately', () => {
+        const req1 = mockRequest('10.0.0.1');
+        const req2 = mockRequest('10.0.0.2');
+        const res1 = mockResponse();
+         const res2 = mockResponse();
+
+        for(let i =0; i<10; i++){
+         rateLimitMiddleware(req1, res1, mockNext);
+         rateLimitMiddleware(req2, res2, mockNext);
+        }
+
+         expect(res1.status).not.toHaveBeenCalled();
+         expect(res2.status).not.toHaveBeenCalled();
+         expect(mockNext).toHaveBeenCalledTimes(20);
+
+      for(let i=0; i<1; i++){
+        rateLimitMiddleware(req1, res1, mockNext);
+        rateLimitMiddleware(req2, res2, mockNext);
+
+      }
+
+       expect(res1.status).toHaveBeenCalledWith(429);
+       expect(res2.status).toHaveBeenCalledWith(429);
+       expect(mockNext).toHaveBeenCalledTimes(20)
+
+    });
+
+  it('should handle missing or invalid IP address', () => {
+        const req = mockRequest(null);
+        const res = mockResponse();
+        rateLimitMiddleware(req, res, mockNext);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({message: 'Missing or invalid IP address'}));
+    });
+  it('should handle malformed requests', () => {
+    const req = mockRequest(12345);
+    const res = mockResponse();
+        rateLimitMiddleware(req, res, mockNext);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({message: 'Malformed Request'}));
+    });
+
+    it('should handle IP addresses with x-forwarded-for', () => {
+       const req = mockRequest('192.168.1.1, 10.0.0.1', { 'x-forwarded-for': '192.168.1.1, 10.0.0.1' });
+       const res = mockResponse();
+
+        for(let i=0; i<11; i++){
+          rateLimitMiddleware(req,res,mockNext)
+        }
+          expect(res.status).toHaveBeenCalledWith(429);
+    });
+
+ it('should use default values if environment variables are not provided', () => {
+        // Clear any previous environment variables
+       process.env.MAX_REQUESTS = '';
+        process.env.TIME_WINDOW_MS = '';
+
+
+      const req = mockRequest('127.0.0.1');
+      const res = mockResponse();
+     for(let i = 0; i < 11; i++){
+       rateLimitMiddleware(req,res,mockNext);
+     }
+       expect(res.status).toHaveBeenCalledWith(429);
+    });
+
+    it('should use env variables for max requests and time window if provided', () => {
+
+      process.env.MAX_REQUESTS = '5';
+      process.env.TIME_WINDOW_MS = '30000';
+
+      const req = mockRequest('127.0.0.1');
+      const res = mockResponse();
+     for(let i = 0; i < 6; i++){
+       rateLimitMiddleware(req,res,mockNext);
+     }
+       expect(res.status).toHaveBeenCalledWith(429);
+
+       process.env.MAX_REQUESTS = '';
+        process.env.TIME_WINDOW_MS = '';
+
+    });
+});
