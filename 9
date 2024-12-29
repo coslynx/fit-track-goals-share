@@ -1,0 +1,74 @@
+#!/bin/bash
+# This script sets up and runs both frontend and backend applications for development.
+
+# Set absolute paths
+API_DIR="$PWD/api"
+SRC_DIR="$PWD/src"
+
+# Function to display error messages and exit
+handle_error() {
+  echo "Error: $1"
+  exit 1
+}
+
+# Check if package.json exists in api directory
+if [[ ! -f "$API_DIR/package.json" ]]; then
+  handle_error "package.json not found in api directory: $API_DIR"
+fi
+
+# Navigate to the api directory
+cd "$API_DIR" || handle_error "Could not navigate to api directory: $API_DIR"
+
+# Install backend dependencies using npm install
+echo "Installing backend dependencies..."
+npm install
+if [[ $? -ne 0 ]]; then
+  handle_error "Failed to install backend dependencies."
+fi
+
+# Check if server.js exists in the api directory before starting
+if [[ ! -f "$API_DIR/server.js" ]]; then
+  handle_error "server.js not found in api directory: $API_DIR"
+fi
+
+# Start the backend server in the background
+echo "Starting backend server..."
+node server.js &
+if [[ $? -ne 0 ]]; then
+    handle_error "Failed to start backend server."
+fi
+echo "Backend server started successfully in the background."
+
+
+# Navigate to the src directory
+cd "$SRC_DIR" || handle_error "Could not navigate to src directory: $SRC_DIR"
+
+# Check if package.json exists in src directory
+if [[ ! -f "$SRC_DIR/package.json" ]]; then
+    handle_error "package.json not found in src directory: $SRC_DIR"
+fi
+
+# Install frontend dependencies using npm install
+echo "Installing frontend dependencies..."
+npm install
+if [[ $? -ne 0 ]]; then
+    handle_error "Failed to install frontend dependencies."
+fi
+
+# Determine the frontend start command (npm run dev or npm run start)
+if grep -q '"dev":' package.json; then
+  echo "Starting frontend application using npm run dev..."
+  npm run dev
+else
+  echo "Starting frontend application using npm run start..."
+    npm run start
+fi
+
+if [[ $? -ne 0 ]]; then
+  handle_error "Failed to start frontend application."
+fi
+echo "Frontend application started successfully."
+
+echo "Setup complete. Frontend and backend applications are running."
+
+exit 0
