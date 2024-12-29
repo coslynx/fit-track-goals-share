@@ -1,0 +1,37 @@
+const express = require('express');
+
+/**
+ * Express.js middleware for handling errors in routes and returning formatted JSON responses.
+ * @param {Error} err - The error object.
+ * @param {express.Request} req - The Express request object.
+ * @param {express.Response} res - The Express response object.
+ * @param {express.NextFunction} next - The Express next function.
+ */
+const errorMiddleware = (err, req, res, next) => {
+  if (err instanceof HttpError) {
+    res.status(err.status).json({
+      status: err.status,
+      message: err.message,
+    });
+      return;
+  }
+    
+    console.error(err);
+  
+    res.status(500).json({
+        status: 500,
+        message: 'Internal server error',
+    });
+    
+};
+
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+      this.name = 'HttpError';
+  }
+}
+
+
+module.exports = errorMiddleware;
