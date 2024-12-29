@@ -1,0 +1,78 @@
+import express from 'express';
+import { Request, Response } from 'express';
+import { PostModel } from '../models/Post';
+import { authMiddleware } from '../middleware/authMiddleware';
+import { errorMiddleware } from '../middleware/errorMiddleware';
+import { validateSocialPost } from '../../src/utils/validators';
+import { Post } from '../../src/types/Post';
+import { config } from 'dotenv';
+
+config();
+
+const socialRouter = express.Router();
+socialRouter.use(authMiddleware);
+
+/**
+ * Controller function for creating a new social post.
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+socialRouter.post('/', async (req: Request, res: Response) => {
+    try {
+        const { content } = req.body;
+
+        // Validate input data
+        const validationResult = validateSocialPost({ content });
+        if (!validationResult.isValid) {
+            return res.status(400).json({ success: false, message: validationResult.message, data: null });
+        }
+
+
+        const newPost = new PostModel({
+            content,
+            author: req.user.id, // Assuming user ID is available from auth middleware
+            createdAt: new Date()
+        });
+
+
+        const savedPost = await newPost.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Social post created successfully',
+            data: savedPost,
+        });
+    } catch (error: any) {
+         console.error('Error creating social post:', error);
+         return res.status(500).json({ success: false, message: 'Failed to create social post.', data: null });
+    }
+});
+
+/**
+ * Controller function for retrieving all social posts.
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+socialRouter.get('/', async (req: Request, res: Response) => {
+    try {
+         const posts = await PostModel.find()
+             .populate('author', 'username') // Populate author with username
+             .sort({ createdAt: -1 }); // Sort by creation date descending
+        
+         res.status(200).json({
+            success: true,
+            message: 'Social posts retrieved successfully',
+            data: posts,
+        });
+    } catch (error: any) {
+        console.error('Error retrieving social posts:', error);
+         return res.status(500).json({ success: false, message: 'Failed to retrieve social posts', data: null });
+    }
+});
+
+socialRouter.use(errorMiddleware);
+
+
+export default socialRouter;
