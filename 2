@@ -1,0 +1,56 @@
+/**
+ * @file authMiddleware.js
+ * @description Middleware for Express.js routes, validates JWT tokens and protects API endpoints.
+ */
+import { Request, Response, NextFunction } from 'express';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import { jwtSecret } from '../../config/auth';
+import { config } from 'dotenv';
+
+config();
+
+
+/**
+ * @function verifyToken
+ * @async
+ * @description Asynchronous middleware function to verify JWT tokens from the Authorization header.
+ * @param {Request} req - Express request object.
+ * @param {Response} res - Express response object.
+ * @param {NextFunction} next - Express next function.
+ * @returns {Promise<void>} - Resolves after processing the request.
+ * @throws {Error} - If JWT secret is missing or undefined.
+ */
+const verifyToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ code: 'unauthorized', message: 'Unauthorized: Token missing or invalid format' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+
+    if (!jwtSecret) {
+        console.error("JWT Secret is undefined, check your config/auth.js and .env file");
+        return res.status(500).json({code: "server_error", message: "Internal Server Error, authentication could not be set up."})
+    }
+    
+    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+    
+    req.user = decoded;
+      next();
+
+  } catch (error: any) {
+      if (error.name === 'TokenExpiredError') {
+          return res.status(401).json({ code: 'unauthorized', message: 'Unauthorized: Token has expired' });
+      }
+      if (error.name === 'JsonWebTokenError') {
+          return res.status(401).json({ code: 'unauthorized', message: 'Unauthorized: Invalid token' });
+      }
+      console.error('Error verifying token:', error);
+    return res.status(401).json({ code: 'unauthorized', message: 'Unauthorized: Invalid token' });
+  }
+};
+
+
+export default verifyToken;
